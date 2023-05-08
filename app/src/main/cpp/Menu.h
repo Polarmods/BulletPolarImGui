@@ -5,13 +5,13 @@
 #include "Unity/Screen.h"
 
 namespace Menu {
-
     ImVec4 color = ImVec4(1, 1, 1, 1);
+    static int screenX, screenY;
     static bool aimbot = false;
-
+    static bool lineEsp = false;
 
     Vector3 GetPosition(void *playerScript) {
-        auto transform = Pointers::GameObject_Transform[playerScript].get();
+        auto transform = Pointers::Component_Transform[playerScript].get();
         if (!transform) {
             return Vector3::zero;
         }
@@ -39,28 +39,38 @@ namespace Menu {
         return GetPosition(myPlayer);
     }
 
+    std::vector<void *> GetPlayerList() {
+        std::vector<void *> finalList = std::vector<void *>();
 
-
-    void* GetClosestEnemy() {
         auto myPlayer = Pointers::PhotonNetwork_player.get();
         if (!myPlayer) {
-            LOGD("FAILED TO GET OWN PLAYER");
-            return nullptr;
+            return finalList;
         }
+
         void *myPlayerScript = Pointers::PhotonPlayer_playerScript[myPlayer].get();
         if (!myPlayerScript) {
-            LOGD("FAILED TO GET OWN PLAYERSCRIPT");
-            return nullptr;
+            return finalList;
         }
+
+        auto playersMonoArray = Pointers::PhotonNetwork_otherPlayers.get();
+        if (playersMonoArray) {
+            auto players = playersMonoArray->toCPPlist();
+            finalList = players;
+        }
+
+        return finalList;
+    }
+
+    void* GetClosestEnemy() {
+        std::vector<void *> playerList = GetPlayerList();
+
+        auto myPlayer = GetMyPlayerScript();
         auto myPos = GetMyPosition();
         auto closestDistance = 99999999;
         void *closestEnemy = nullptr;
-        auto playersMonoArray = Pointers::PhotonNetwork_otherPlayers.get();
-        if (playersMonoArray) {
-            LOGD("WE GOT THE LIST OF PLAYERS");
-            auto players = playersMonoArray->toCPPlist();
-            for (void *player: players) {
-                LOGD("WE ARE LOOPING OVER A PLAYER");
+
+        if (!playerList.empty()) {
+            for (void *player : playerList) {
                 if (!player) {
                     continue;
                 }
@@ -68,24 +78,20 @@ namespace Menu {
                 if (!playerScript) {
                     continue;
                 }
-                LOGD("CHECKING IF THEY ARE ON OUR TEAM");
-                if (Pointers::PlayerUtils_IsPlayerOnTeam.call(player, myPlayer)) {
+                if (Pointers::PlayerUtils_IsPlayerOnTeam.call(playerScript, myPlayer)) {
                     continue;
                 }
-                auto transform = Pointers::GameObject_Transform[playerScript].get();
-                if (!transform) {
-                    continue;
-                }
-                LOGD("CHECKING THE TRANSFORM");
-                auto location = Pointers::Transform_Position[transform].get();
-                LOGD("CHECKING THE DISTANCE");
-                auto distance = Vector3::Distance(myPos, location);
-                if (closestDistance > distance) {
+
+                auto position = GetPosition(playerScript);
+                auto distance = Vector3::Distance(myPos, position);
+
+                if (distance < closestDistance) {
                     closestDistance = distance;
-                    closestEnemy = player;
+                    closestEnemy = playerScript;
                 }
             }
         }
+
         return closestEnemy;
     }
 
@@ -95,25 +101,50 @@ namespace Menu {
             if (myPlayer) {
                 auto closestEnemy = GetClosestEnemy();
                 if (closestEnemy) {
+                    LOGD("Got closest player!");
                     auto myPos = GetMyPosition();
                     auto enemyPos = GetPosition(closestEnemy);
+                    LOGD("My pos: %f, %f, %f", myPos.x, myPos.y, myPos.z);
+                    LOGD("Enemy pos: %f, %f, %f", enemyPos.x, enemyPos.y, enemyPos.z);
+                    auto screenPos = Pointers::Camera_WorldToScreenPoint[Pointers::Camera_Main.get()].call(enemyPos);
+                    ESP::DrawLine(ImVec2(myPos.x, -10), ImVec2(screenPos->x, screenPos->y - Unity::Screen::Height.get()), ImVec4(1,0,1,1));
                     auto rotation = Quaternion::LookRotation(enemyPos - myPos, Vector3(0, 1, 0));
                     Pointers::PlayerScript_rotation[myPlayer].set(&rotation);
                 }
+            }
+        } else if (lineEsp) {
+            auto playerList = GetPlayerList();
+            for (void *player: playerList) {
+                if (!player) {
+                    continue;
+                }
+                void *playerScript = Pointers::PhotonPlayer_playerScript[player].get();
+                if (!playerScript) {
+                    continue;
+                }
+                bool myTeam = Pointers::PlayerUtils_IsPlayerOnTeam(GetMyPlayerScript(), playerScript);
+                auto espColor = myTeam ? ImVec4(0,0,1,1) : ImVec4(1,0,0,1);
+                auto worldPos = GetPosition(playerScript);
+                auto screenPos = Pointers::Camera_WorldToScreenPoint[Pointers::Camera_Main.get()].call(worldPos);
+                ESP::DrawLine(ImVec2(screenX / 2, screenY + 10), ImVec2((int)screenPos->x,(int)screenPos->y),  espColor);
             }
         }
     }
 
     void DrawMenu() {
+        LOGD("Here we are rendering the menu");
         ExecuteHacks();
         static bool closed = false;
         ImGui::Begin("Toshi's Bullet Force (Auto Update)", &closed);
         ImGui::Checkbox("Aimbot", &aimbot);
+        ImGui::Checkbox("Line ESP", &lineEsp);
         ImGui::End();
     }
 
     void DrawImGui() {
         if (init && Unity::Screen::is_done) {
+            screenX = Unity::Screen::Height.get();
+            screenY = Unity::Screen::Width.get();
 
             ImGuiIO &io = ImGui::GetIO();
 
@@ -124,7 +155,7 @@ namespace Menu {
 
             ImGui_ImplOpenGL3_NewFrame();
 
-            ImGui_ImplAndroid_NewFrame(Unity::Screen::Width.get(), Unity::Screen::Height.get());
+            ImGui_ImplAndroid_NewFrame(screenX, screenY);
 
             ImGui::NewFrame();
             DrawMenu();
@@ -146,7 +177,7 @@ namespace Menu {
             io.KeysDown[io.KeyMap[ImGuiKey_End]] = false;
             io.KeysDown[io.KeyMap[ImGuiKey_Insert]] = false;
             ImGui::EndFrame();
-
+            LOGD("Here is the menu rendered");
         }
     }
 }

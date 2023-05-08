@@ -54,7 +54,6 @@ void *hack_thread(void *)
         il2cpp_base_map = KittyMemory::getLibraryMap("libil2cpp.so");
     } while (!il2cpp_base_map.isValid());
 
-    LOGD("IL2CPP LOADED");
     auto eglhandle = dlopen("libEGL.so", RTLD_LAZY);
     const char *dlopen_error = dlerror();
     if (dlopen_error)
@@ -85,6 +84,7 @@ void *hack_thread(void *)
     Unity::Screen::Setup();
     Pointers::LoadPointers();
     DetachIl2Cpp(); // remember to detach when you are done using bynamemodding functions
+    LOGD("IL2CPP LOADED");
     return NULL;
 }
 

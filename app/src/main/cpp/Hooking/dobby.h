@@ -101,14 +101,14 @@ typedef struct _RegisterContext {
 #elif defined(_M_IX86) || defined(__i386__)
 typedef struct _RegisterContext {
   uint32_t dummy_0;
-  uint32_t esp;
+  uint32_t lineEsp;
 
   uint32_t dummy_1;
   uint32_t flags;
 
   union {
     struct {
-      uint32_t eax, ebx, ecx, edx, ebp, esp, edi, esi;
+      uint32_t eax, ebx, ecx, edx, ebp, lineEsp, edi, esi;
     } regs;
   } general;
 
