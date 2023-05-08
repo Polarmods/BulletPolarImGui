@@ -35,10 +35,11 @@
 #include "Unity/Screen.h"
 #include "Unity/Input.h"
 #include "main.h"
-// the private version held by certain polarmodders has image loading and a lot more
 
 EGLBoolean (*old_eglSwapBuffers)(...);
 EGLBoolean new_eglSwapBuffers(EGLDisplay _display, EGLSurface _surface) {
+    eglQuerySurface(_display, _surface, EGL_WIDTH, &Menu::screenX);
+    eglQuerySurface(_display, _surface, EGL_HEIGHT, &Menu::screenY);
     SetupImGui();
     Menu::DrawImGui();
 
@@ -81,10 +82,9 @@ void *hack_thread(void *)
     BNM::External::LoadBNM(il2cppHandle);
 
     AttachIl2Cpp(); // this is required when you use bynamemodding functions
-    Unity::Screen::Setup();
     Pointers::LoadPointers();
+    Unity::Screen::Setup();
     DetachIl2Cpp(); // remember to detach when you are done using bynamemodding functions
-    LOGD("IL2CPP LOADED");
     return NULL;
 }
 

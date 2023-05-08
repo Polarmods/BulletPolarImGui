@@ -6,10 +6,10 @@
 
 namespace Menu {
     ImVec4 color = ImVec4(1, 1, 1, 1);
-    static int screenX, screenY;
     static bool aimbot = false;
     static bool lineEsp = false;
-
+    static bool triggerBot = false;
+    static int screenX, screenY;
     Vector3 GetPosition(void *playerScript) {
         auto transform = Pointers::Component_Transform[playerScript].get();
         if (!transform) {
@@ -19,13 +19,13 @@ namespace Menu {
         return location;
     }
 
-    void* GetMyPlayerScript() {
+    void *GetMyPlayerScript() {
         auto myPlayer = Pointers::PhotonNetwork_player.get();
         if (!myPlayer) {
             return nullptr;
         }
         void *myPlayerScript = Pointers::PhotonPlayer_playerScript[myPlayer].get();
-        if (!myPlayerScript) {
+        if (!BNM::IsUnityObjectAlive(myPlayer)) {
             return nullptr;
         }
         return myPlayerScript;
@@ -33,7 +33,7 @@ namespace Menu {
 
     Vector3 GetMyPosition() {
         auto myPlayer = GetMyPlayerScript();
-        if (!myPlayer) {
+        if (!BNM::IsUnityObjectAlive(myPlayer)) {
             return Vector3::zero;
         }
         return GetPosition(myPlayer);
@@ -48,7 +48,7 @@ namespace Menu {
         }
 
         void *myPlayerScript = Pointers::PhotonPlayer_playerScript[myPlayer].get();
-        if (!myPlayerScript) {
+        if (!BNM::IsUnityObjectAlive(myPlayerScript)) {
             return finalList;
         }
 
@@ -61,28 +61,35 @@ namespace Menu {
         return finalList;
     }
 
-    void* GetClosestEnemy() {
-        std::vector<void *> playerList = GetPlayerList();
-
+    void *GetClosestEnemy() {
         auto myPlayer = GetMyPlayerScript();
+        if (!BNM::IsUnityObjectAlive(myPlayer)) {
+            return nullptr;
+        }
+        std::vector<void *> playerList = GetPlayerList();
         auto myPos = GetMyPosition();
         auto closestDistance = 99999999;
         void *closestEnemy = nullptr;
 
         if (!playerList.empty()) {
-            for (void *player : playerList) {
+            for (void *player: playerList) {
                 if (!player) {
                     continue;
                 }
                 void *playerScript = Pointers::PhotonPlayer_playerScript[player].get();
-                if (!playerScript) {
+                if (!BNM::IsUnityObjectAlive(playerScript)) {
                     continue;
                 }
                 if (Pointers::PlayerUtils_IsPlayerOnTeam.call(playerScript, myPlayer)) {
                     continue;
                 }
-
+                if (0 >= Pointers::PlayerScript_health[playerScript].get()) {
+                    continue;
+                }
                 auto position = GetPosition(playerScript);
+                if (position == Vector3::zero) {
+                    continue;
+                }
                 auto distance = Vector3::Distance(myPos, position);
 
                 if (distance < closestDistance) {
@@ -98,53 +105,68 @@ namespace Menu {
     void ExecuteHacks() {
         if (aimbot) {
             auto myPlayer = GetMyPlayerScript();
-            if (myPlayer) {
+            if (BNM::IsUnityObjectAlive(myPlayer)) {
                 auto closestEnemy = GetClosestEnemy();
-                if (closestEnemy) {
-                    LOGD("Got closest player!");
+                if (BNM::IsUnityObjectAlive(closestEnemy)) {
                     auto myPos = GetMyPosition();
                     auto enemyPos = GetPosition(closestEnemy);
-                    LOGD("My pos: %f, %f, %f", myPos.x, myPos.y, myPos.z);
-                    LOGD("Enemy pos: %f, %f, %f", enemyPos.x, enemyPos.y, enemyPos.z);
-                    auto screenPos = Pointers::Camera_WorldToScreenPoint[Pointers::Camera_Main.get()].call(enemyPos);
-                    ESP::DrawLine(ImVec2(myPos.x, -10), ImVec2(screenPos->x, screenPos->y - Unity::Screen::Height.get()), ImVec4(1,0,1,1));
-                    auto rotation = Quaternion::LookRotation(enemyPos - myPos, Vector3(0, 1, 0));
-                    Pointers::PlayerScript_rotation[myPlayer].set(&rotation);
+                    enemyPos -= Vector3(0, 0.5, 0);
+                    auto rotation = Quaternion::LookRotation(enemyPos - myPos, Vector3(0.0, 0.1, 0.0));
+                    Pointers::PlayerScript_rotation[myPlayer].set(rotation);
                 }
             }
-        } else if (lineEsp) {
-            auto playerList = GetPlayerList();
-            for (void *player: playerList) {
-                if (!player) {
-                    continue;
+        }
+        if (lineEsp) {
+            auto myPlayer = GetMyPlayerScript();
+            if (BNM::IsUnityObjectAlive(myPlayer)) {
+                auto playerList = GetPlayerList();
+                for (void *player: playerList) {
+                    if (!player) {
+                        continue;
+                    }
+                    void *playerScript = Pointers::PhotonPlayer_playerScript[player].get();
+                    if (!BNM::IsUnityObjectAlive(playerScript)) {
+                        continue;
+                    }
+                    bool myTeam = Pointers::PlayerUtils_IsPlayerOnTeam(GetMyPlayerScript(),
+                                                                       playerScript);
+                    auto espColor = myTeam ? ImVec4(0, 0, 1, 1) : ImVec4(1, 0, 0, 1);
+                    auto worldPos = GetPosition(playerScript);
+                    if (worldPos == Vector3::zero) {
+                        continue;
+                    }
+                    auto camera = Pointers::PlayerScript_mCamera[myPlayer].get();
+                    auto screenPos = Pointers::Camera_WorldToScreenPoint[camera].call(worldPos);
+                    ESP::DrawLine(ImVec2(screenX / 2, 0),
+                                  ImVec2((int) screenPos.x, screenY - (int) screenPos.y), espColor);
                 }
-                void *playerScript = Pointers::PhotonPlayer_playerScript[player].get();
-                if (!playerScript) {
-                    continue;
+            }
+        }
+        if (triggerBot) {
+            auto myPlayer = GetMyPlayerScript();
+            if (BNM::IsUnityObjectAlive(myPlayer)) {
+                auto aimingAt = Pointers::PlayerScript_GetPlayerAimingAt[myPlayer].call();
+                if (BNM::IsUnityObjectAlive(aimingAt)) {
+                    if (!Pointers::PlayerUtils_IsPlayerOnTeam.call(aimingAt, myPlayer)) {
+                        Pointers::PlayerScript_Shoot[myPlayer].call();
+                    }
                 }
-                bool myTeam = Pointers::PlayerUtils_IsPlayerOnTeam(GetMyPlayerScript(), playerScript);
-                auto espColor = myTeam ? ImVec4(0,0,1,1) : ImVec4(1,0,0,1);
-                auto worldPos = GetPosition(playerScript);
-                auto screenPos = Pointers::Camera_WorldToScreenPoint[Pointers::Camera_Main.get()].call(worldPos);
-                ESP::DrawLine(ImVec2(screenX / 2, screenY + 10), ImVec2((int)screenPos->x,(int)screenPos->y),  espColor);
             }
         }
     }
 
     void DrawMenu() {
-        LOGD("Here we are rendering the menu");
         ExecuteHacks();
         static bool closed = false;
         ImGui::Begin("Toshi's Bullet Force (Auto Update)", &closed);
         ImGui::Checkbox("Aimbot", &aimbot);
         ImGui::Checkbox("Line ESP", &lineEsp);
+        ImGui::Checkbox("TriggerBot", &triggerBot);
         ImGui::End();
     }
 
     void DrawImGui() {
         if (init && Unity::Screen::is_done) {
-            screenX = Unity::Screen::Height.get();
-            screenY = Unity::Screen::Width.get();
 
             ImGuiIO &io = ImGui::GetIO();
 
@@ -177,7 +199,7 @@ namespace Menu {
             io.KeysDown[io.KeyMap[ImGuiKey_End]] = false;
             io.KeysDown[io.KeyMap[ImGuiKey_Insert]] = false;
             ImGui::EndFrame();
-            LOGD("Here is the menu rendered");
+
         }
     }
 }

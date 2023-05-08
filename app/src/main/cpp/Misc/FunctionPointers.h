@@ -18,7 +18,7 @@ namespace Pointers {
     BNM::Method<void> Transform_LookAt;
 
     BNM::LoadClass Camera;
-    BNM::Method<Vector3 *> Camera_WorldToScreenPoint;
+    BNM::Method<Vector3> Camera_WorldToScreenPoint;
     BNM::Property<void *> Camera_Main;
 
     BNM::LoadClass PhotonNetwork;
@@ -29,7 +29,11 @@ namespace Pointers {
     BNM::Field<void *> PhotonPlayer_playerScript;
 
     BNM::LoadClass PlayerScript;
-    BNM::Field<Quaternion *> PlayerScript_rotation;
+    BNM::Method<void *> PlayerScript_GetPlayerAimingAt;
+    BNM::Method<void> PlayerScript_Shoot;
+    BNM::Property<float> PlayerScript_health;
+    BNM::Field<Quaternion> PlayerScript_rotation;
+    BNM::Field<void *> PlayerScript_mCamera;
 
     BNM::LoadClass PlayerUtils;
     BNM::Method<bool> PlayerUtils_IsPlayerOnTeam;
@@ -58,7 +62,11 @@ namespace Pointers {
             PlayerUtils_IsPlayerOnTeam = PlayerUtils.GetMethodByName("IsPlayerOnTeam");
 
             PlayerScript = BNM::LoadClass("", "PlayerScript");
+            PlayerScript_GetPlayerAimingAt = PlayerScript.GetMethodByName("GetPlayerAimingAt", 0);
+            PlayerScript_Shoot = PlayerScript.GetMethodByName("Shoot", 0);
+            PlayerScript_health = PlayerScript.GetPropertyByName("health");
             PlayerScript_rotation = PlayerScript.GetFieldByName("rotation");
+            PlayerScript_mCamera = PlayerScript.GetFieldByName("mCamera");
     }
 }
 #endif IMGUIANDROID_FUNCTIONPOINTERS_H
